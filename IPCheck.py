@@ -6,8 +6,8 @@
 # for public IP address reputation data.
 #
 # Author: Jonathan Stallard
-# Version: 1.2
-# Last Revised: 6/24/2025
+# Version: 1.3
+# Last Revised: 7/2/2025
 # --------------------------------------------
 # API Keys are loaded securely from a `.env` file.
 # --------------------------------------------
@@ -77,12 +77,14 @@ def check_greynoise(ip):
         classification = data.get("classification", "N/A")
         name = data.get("name", "N/A")
         message = data.get("message", "")
-        return (
+        result = (
             f"GreyNoise Community:\n"
             f"  Classification: {classification}\n"
-            f"  Name: {name}\n"
-            f"  Message: {message}"
+            f"  Name: {name}"
         )
+        if message and message != "Success":
+            result += f"\n  Message: {message}"
+        return result
     except Exception as e:
         return f"GreyNoise – Error: {e}"
 
