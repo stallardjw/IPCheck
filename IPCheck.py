@@ -6,8 +6,8 @@
 # for public IP address reputation data.
 #
 # Author: Jonathan Stallard
-# Version: 1.3
-# Last Revised: 7/2/2025
+# Version: 1.4
+# Last Revised: 7/29/2025
 # --------------------------------------------
 # API Keys are loaded securely from a `.env` file.
 # --------------------------------------------
@@ -60,31 +60,60 @@ def check_abuseipdb(ip):
 
 def check_greynoise(ip):
     """
-    Query GreyNoise Community API.
-    Returns classification and metadata if available.
+    Query the unified GreyNoise v3 API and parse the nested response.
+    Returns detailed data if the IP has been observed.
     """
-    url = f"https://api.greynoise.io/v3/community/{ip}"
+    if not GREYNOISE_API_KEY:
+        return "GreyNoise – Error: API key not found. Check your .env file."
+
+    url = f"https://api.greynoise.io/v3/ip/{ip}"
     headers = {
         "Accept": "application/json",
         "key": GREYNOISE_API_KEY
     }
     try:
         resp = requests.get(url, headers=headers, timeout=10)
+
         if resp.status_code == 404:
-            return f"GreyNoise – No data for IP."
+            return "GreyNoise – IP not observed."
+
         resp.raise_for_status()
         data = resp.json()
-        classification = data.get("classification", "N/A")
-        name = data.get("name", "N/A")
-        message = data.get("message", "")
-        result = (
-            f"GreyNoise Community:\n"
-            f"  Classification: {classification}\n"
-            f"  Name: {name}"
-        )
-        if message and message != "Success":
-            result += f"\n  Message: {message}"
-        return result
+
+        # Get the two main data blocks from the response
+        isi = data.get("internet_scanner_intelligence", {})
+        bsi = data.get("business_service_intelligence", {})
+
+        # Check if GreyNoise found anything in either block
+        if not isi.get("found") and not bsi.get("found"):
+            return "GreyNoise – IP observed, but no specific intelligence found."
+
+        # Build the report
+        lines = ["GreyNoise:"]
+        
+        if bsi.get("found"):
+            lines.append(f"  Name: {bsi.get('name', 'N/A')}")
+            lines.append(f"  Category: {bsi.get('category', 'N/A')}")
+            description = bsi.get('description')
+            if description:
+                 lines.append(f"  Description: {description}")
+
+        elif isi.get("found"):
+            lines.append(f"  Classification: {isi.get('classification', 'N/A')}")
+            lines.append(f"  Last Seen: {isi.get('last_seen', 'N/A')}")
+            lines.append(f"  Actor: {isi.get('actor', 'N/A')}")
+            if isi.get('tags'):
+                tag_names = [tag['name'] for tag in isi['tags']]
+                lines.append(f"  Tags: {', '.join(tag_names)}")
+
+        return "\n".join(lines)
+
+    except requests.exceptions.HTTPError as http_err:
+        try:
+            error_message = http_err.response.json().get("message", http_err)
+        except Exception:
+            error_message = http_err
+        return f"GreyNoise – Error: {error_message}"
     except Exception as e:
         return f"GreyNoise – Error: {e}"
 
